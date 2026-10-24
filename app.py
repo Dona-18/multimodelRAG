@@ -94,14 +94,14 @@ def render_upload_control(
         type=["pdf", "docx", "txt", "md", "markdown"],
         accept_multiple_files=False,
         key=key,
-        help="Only this document is indexed. Selecting a new document replaces the current local index.",
+        help="Only this document is processed. Selecting a new document replaces the current document.",
     )
     if st.button(button_label, type="primary", disabled=upload is None, key=f"{key}_index"):
         try:
             saved_path = save_upload(upload.name, upload.getvalue())
             indexed, processing_message = replace_current_document(saved_path, index_settings, generation_settings)
             st.session_state.notice = (
-                f"Indexed {indexed} chunks from {display_name(saved_path)}; {processing_message}. "
+                f"Processed {indexed} chunks from {display_name(saved_path)}; {processing_message}. "
                 "Chat is now unlocked."
             )
             st.rerun()
@@ -143,7 +143,7 @@ except OllamaUnavailableError as exc:
 with st.sidebar:
     st.header("Local RAG")
     st.caption("Your document, embeddings, database, and answers stay on this Mac.")
-    st.metric("Indexed chunks", store.count)
+    st.metric("Processed chunks", store.count)
 
     with st.expander("Advanced Settings"):
         if st.button(
@@ -256,7 +256,7 @@ with st.sidebar:
         store.clear()
         clear_active_source()
         st.session_state.messages = []
-        st.session_state.notice = "Cleared the current index. Your uploaded file remains stored locally."
+        st.session_state.notice = "Cleared the current document. Your uploaded file remains stored locally."
         st.rerun()
 
 st.title("📚 Local RAG Assistant")
@@ -273,30 +273,30 @@ chat_unlocked = chat_is_unlocked(store.count) and active_source is not None and 
 if reingestion_required and active_source is not None:
     stored_index_settings = load_index_settings()
     if stored_index_settings is None:
-        st.warning("This index predates chunk-setting tracking. Re-index the current document once to continue.")
+        st.warning("This document was prepared before chunk-setting tracking. Re-process the current document once to continue.")
     else:
-        st.warning("Chunking or PDF processing settings changed. Re-index the current document before asking questions.")
-    if st.button("Re-index current document", type="primary"):
+        st.warning("Chunking or PDF processing settings changed. Re-process the current document before asking questions.")
+    if st.button("Re-process current document", type="primary"):
         try:
             indexed, processing_message = replace_current_document(active_source, index_settings, generation_settings)
-            st.session_state.notice = f"Re-indexed {indexed} chunks from {display_name(active_source)}; {processing_message}."
+            st.session_state.notice = f"Re-processed {indexed} chunks from {display_name(active_source)}; {processing_message}."
             st.rerun()
         except (DocumentLoadError, OllamaUnavailableError, ValueError) as exc:
             st.error(str(exc))
-    st.chat_input("Re-index the document to unlock chat", disabled=True)
+    st.chat_input("Re-process the document to unlock chat", disabled=True)
 elif not chat_unlocked:
     st.subheader("Upload a document to unlock chat")
     if store.count and active_source is None:
-        st.info("This older index is not associated with one active document. Upload a document to safely replace it.")
+        st.info("This older data is not associated with one active document. Upload a document to safely replace it.")
     else:
-        st.info("The assistant answers only from the document you index here.")
-    render_upload_control("document_upload", "Index document", index_settings, generation_settings)
+        st.info("The assistant answers only from the document you process here.")
+    render_upload_control("document_upload", "Process document", index_settings, generation_settings)
     st.divider()
     st.chat_input("Upload a document above to unlock chat", disabled=True)
 else:
-    st.success(f"Ready to answer from {display_name(active_source)} ({store.count} indexed chunks).")
+    st.success(f"Ready to answer from {display_name(active_source)} ({store.count} processed chunks).")
     with st.expander("Replace current document"):
-        st.caption("Indexing a replacement clears the current index only after the new document is readable and chunked.")
+        st.caption("Processing a replacement clears the current document only after the new document is readable and chunked.")
         render_upload_control("replacement_upload", "Replace document", index_settings, generation_settings)
 
     for message in st.session_state.messages:
@@ -346,5 +346,3 @@ else:
             st.session_state.messages.append({"role": "assistant", "content": answer.answer, "hits": answer.used_hits})
         except OllamaUnavailableError as exc:
             st.error(str(exc))
-
-st.caption(f"Answer model: `{LLM_MODEL}` · Embeddings: `{EMBEDDING_MODEL}`")
