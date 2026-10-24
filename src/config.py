@@ -12,7 +12,18 @@ ACTIVE_SOURCE_PATH = DATA_DIR / "active_source.json"
 for directory in (DATA_DIR, UPLOADS_DIR, CHROMA_DIR, RENDERED_PAGES_DIR):
     directory.mkdir(parents=True, exist_ok=True)
 
-OLLAMA_URL = "http://127.0.0.1:11434"
+import os
+
+def _get_ollama_url() -> str:
+    try:
+        import streamlit as st
+        if "OLLAMA_URL" in st.secrets:
+            return str(st.secrets["OLLAMA_URL"]).rstrip("/")
+    except Exception:
+        pass
+    return os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
+
+OLLAMA_URL = _get_ollama_url()
 LLM_MODEL = "gemma4:e2b-mlx"
 EMBEDDING_MODEL = "nomic-embed-text:latest"
 COLLECTION_NAME = "local_multimodal_rag"
