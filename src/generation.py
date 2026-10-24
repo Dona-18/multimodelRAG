@@ -32,6 +32,7 @@ def generate_grounded_answer(
     query: str,
     retrieved_documents: List[Document],
     temperature: float = 0.1,
+    **kwargs,
 ) -> Dict[str, Any]:
     """Generate grounded answer using local Ollama model."""
     if not retrieved_documents:
