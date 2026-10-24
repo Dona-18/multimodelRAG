@@ -14,13 +14,7 @@ for path in [DATA_DIR, CHROMA_DIR, UPLOADS_DIR, IMAGES_DIR]:
 
 
 def get_ollama_url() -> str:
-    """Retrieve Ollama endpoint from Streamlit secrets, env var, or local default."""
-    try:
-        import streamlit as st
-        if "OLLAMA_URL" in st.secrets:
-            return str(st.secrets["OLLAMA_URL"]).rstrip("/")
-    except Exception:
-        pass
+    """Retrieve Ollama endpoint from environment variable or local default."""
     return os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 
 

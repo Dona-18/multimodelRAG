@@ -4,6 +4,9 @@ __pycache__/
 .pytest_cache/
 data/chroma/*
 !data/chroma/.gitkeep
+data/chroma_db/*
+data/extracted_images/*
+data/rendered_pages/*
 data/uploads/*
 !data/uploads/.gitkeep
 .agents/
