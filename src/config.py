@@ -1,20 +1,20 @@
-"""Small, explicit configuration for the local-first assistant."""
+"""Simple configuration for local Multimodal RAG."""
+import os
 from pathlib import Path
 
-PROJECT_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = PROJECT_DIR / "data"
+# Directories
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
+CHROMA_DIR = DATA_DIR / "chroma_db"
 UPLOADS_DIR = DATA_DIR / "uploads"
-CHROMA_DIR = DATA_DIR / "chroma"
-RENDERED_PAGES_DIR = DATA_DIR / "rendered_pages"
-INDEX_SETTINGS_PATH = DATA_DIR / "index_settings.json"
-ACTIVE_SOURCE_PATH = DATA_DIR / "active_source.json"
+IMAGES_DIR = DATA_DIR / "extracted_images"
 
-for directory in (DATA_DIR, UPLOADS_DIR, CHROMA_DIR, RENDERED_PAGES_DIR):
-    directory.mkdir(parents=True, exist_ok=True)
+for path in [DATA_DIR, CHROMA_DIR, UPLOADS_DIR, IMAGES_DIR]:
+    path.mkdir(parents=True, exist_ok=True)
 
-import os
 
-def _get_ollama_url() -> str:
+def get_ollama_url() -> str:
+    """Retrieve Ollama endpoint from Streamlit secrets, env var, or local default."""
     try:
         import streamlit as st
         if "OLLAMA_URL" in st.secrets:
@@ -23,27 +23,9 @@ def _get_ollama_url() -> str:
         pass
     return os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 
-OLLAMA_URL = _get_ollama_url()
+
+OLLAMA_URL = get_ollama_url()
+
+# Local Ollama models
 LLM_MODEL = "gemma4:e2b-mlx"
 EMBEDDING_MODEL = "nomic-embed-text:latest"
-COLLECTION_NAME = "local_multimodal_rag"
-
-# These are deliberately visible in the interface.  They are starting points,
-# not universal truth: users can tune them for their own document collection.
-DEFAULT_CHUNK_SIZE = 1_000
-DEFAULT_CHUNK_OVERLAP = 150
-DEFAULT_TOP_K = 3
-DEFAULT_MIN_SIMILARITY = 0.35
-RRF_K = 60
-
-# Local Gemma settings. The context maximum was verified from the installed
-# model metadata; the UI offers safe values no larger than this limit.
-MODEL_MAX_CONTEXT_LENGTH = 131_072
-DEFAULT_TEMPERATURE = 0.2
-DEFAULT_TOP_P = 0.95
-DEFAULT_MAX_OUTPUT_TOKENS = 512
-DEFAULT_CONTEXT_LENGTH = 8_192
-
-# Visual summaries use the local Gemma vision model with Poppler.
-DEFAULT_VISUAL_SUMMARIES = False
-DEFAULT_VISUAL_PAGE_LIMIT = 3

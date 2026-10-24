@@ -23,11 +23,10 @@ This project was intentionally adapted from the lesson material at
 | --- | --- |
 | `1_ingestion_pipeline.py`: documents → chunks → Nomic → cosine Chroma | `src/ingestion.py`, `src/vector_store.py` with `OllamaEmbeddings` + `Chroma` |
 | `5_recursive_character_text_spliiter.py`: paragraph/line/sentence/word split priority | `RecursiveCharacterTextSplitter` in `src/ingestion.py` |
-| `2_retrieval_pipeline.py`: `db.as_retriever(...).invoke(query)` | `VectorStore.vector_search` |
-| `3_answer_generation.py`: local Gemma answer using retrieved context only | `src/generation.py` |
-| `12_hybrid_search.ipynb`: dense + BM25 retrieval | `src/retrieval.py` |
-| `10_multi_query_retrieval.py`: JSON query variations using `ChatOllama` | `generate_query_variations` and the optional UI toggle |
-| `11_reciprocal_rank_fusion.py`: RRF `1 / (60 + rank)` | `reciprocal_rank_fusion` |
+| `2_retrieval_pipeline.py`: `db.as_retriever(...).invoke(query)` | `src/retrieval.py` (`vector_search`) |
+| `3_answer_generation.py`: local Gemma answer using retrieved context only | `src/generation.py` (`generate_grounded_answer`) |
+| `12_hybrid_search.ipynb`: dense + BM25 retrieval | `src/retrieval.py` (`keyword_search`, `hybrid_search`) |
+| `11_reciprocal_rank_fusion.py`: RRF `1 / (60 + rank)` | `src/retrieval.py` (`reciprocal_rank_fusion`) |
 
 The project uses the same core libraries as the lessons: `langchain-core`,
 `langchain-text-splitters`, `langchain-ollama`, and `langchain-chroma`.

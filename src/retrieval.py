@@ -1,135 +1,64 @@
-"""Reference-style dense/BM25 retrieval, multi-query expansion, and RRF."""
-from __future__ import annotations
-
+"""Simple retrieval: Vector search, BM25 keyword search, and RRF."""
 import re
 from collections import defaultdict
-
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import PromptTemplate
-from langchain_ollama import ChatOllama
-from pydantic import BaseModel, Field
+from typing import List, Tuple
 from rank_bm25 import BM25Plus
-
-from src.config import DEFAULT_MIN_SIMILARITY, RRF_K
-from src.ollama_client import get_chat_model
-from src.types import Chunk, RetrievalResult, SearchHit
-from src.vector_store import VectorStore
+from langchain_core.documents import Document
+from langchain_chroma import Chroma
 
 
-def _tokens(text: str) -> list[str]:
-    return re.findall(r"\w+", text.lower())
+def vector_search(query: str, db: Chroma, k: int = 4) -> List[Document]:
+    """Search ChromaDB using embeddings similarity."""
+    return db.as_retriever(search_kwargs={"k": k}).invoke(query)
 
 
-def keyword_search(query: str, chunks: list[Chunk], k: int) -> list[tuple[Chunk, float]]:
-    """The same BM25 keyword-search complement demonstrated in lesson 12."""
-    tokens = _tokens(query)
-    if not chunks or not tokens:
+def keyword_search(query: str, documents: List[Document], k: int = 4) -> List[Document]:
+    """Search documents by exact keyword matches using BM25."""
+    if not documents:
         return []
-    corpus = [_tokens(chunk.text) for chunk in chunks]
-    scores = BM25Plus(corpus).get_scores(tokens)
-    ranked = sorted(zip(chunks, scores), key=lambda pair: float(pair[1]), reverse=True)
-    return [(chunk, float(score)) for chunk, score in ranked[:k] if score > 0]
+    tokens = re.findall(r"\w+", query.lower())
+    if not tokens:
+        return documents[:k]
 
+    corpus = [re.findall(r"\w+", doc.page_content.lower()) for doc in documents]
+    bm25 = BM25Plus(corpus)
+    scores = bm25.get_scores(tokens)
 
-class QueryVariations(BaseModel):
-    """The Pydantic + JsonOutputParser shape used in lesson 10."""
-    queries: list[str] = Field(description="Alternative retrieval queries")
-
-
-def generate_query_variations(query: str, llm: ChatOllama | None = None, count: int = 3) -> list[str]:
-    """Generate lesson-style query variations, with safe fallback to the original."""
-    parser = JsonOutputParser(pydantic_object=QueryVariations)
-    prompt = PromptTemplate(
-        template=(
-            "Generate {count} different variations of this query that would help retrieve "
-            "relevant documents. Keep the original meaning and return only JSON.\n\n"
-            "Original query: {original_query}\n{format_instructions}"
-        ),
-        input_variables=["original_query", "count"],
-        partial_variables={"format_instructions": parser.get_format_instructions()},
-    )
-    try:
-        response = (prompt | (llm or get_chat_model()) | parser).invoke(
-            {"original_query": query, "count": count}
-        )
-        candidates = response["queries"] if isinstance(response, dict) else response.queries
-    except Exception:
-        # Multi-query is optional; failed structured output must not block local QA.
-        return [query]
-    unique = [query]
-    for candidate in candidates:
-        cleaned = str(candidate).strip()
-        if cleaned and cleaned.lower() not in {item.lower() for item in unique}:
-            unique.append(cleaned)
-    return unique[: count + 1]
+    ranked = sorted(zip(documents, scores), key=lambda item: item[1], reverse=True)
+    results = [doc for doc, score in ranked if score > 0]
+    return results[:k] if results else documents[:k]
 
 
 def reciprocal_rank_fusion(
-    ranked_lists: list[list[tuple[Chunk, float]]], k: int = RRF_K
-) -> list[tuple[Chunk, float]]:
-    """Implement the lesson's score exactly: ``1 / (60 + rank)``.
+    ranked_lists: List[List[Document]],
+    k: int = 60,
+) -> List[Tuple[Document, float]]:
+    """Combine multiple ranked search results using RRF score = 1 / (60 + rank)."""
+    scores = defaultdict(float)
+    unique_docs = {}
 
-    Chunk IDs are used as the key instead of raw text so identical sentences on
-    different source pages remain separately citable.
-    """
-    scores: defaultdict[str, float] = defaultdict(float)
-    chunks: dict[str, Chunk] = {}
-    for ranked_list in ranked_lists:
-        for rank, (chunk, _score) in enumerate(ranked_list, start=1):
-            chunks[chunk.id] = chunk
-            scores[chunk.id] += 1.0 / (k + rank)
-    return sorted(((chunks[chunk_id], score) for chunk_id, score in scores.items()), key=lambda pair: pair[1], reverse=True)
+    for doc_list in ranked_lists:
+        for rank, doc in enumerate(doc_list, 1):
+            unique_docs[doc.page_content] = doc
+            scores[doc.page_content] += 1.0 / (k + rank)
+
+    return sorted(
+        [(unique_docs[key], score) for key, score in scores.items()],
+        key=lambda item: item[1],
+        reverse=True,
+    )
 
 
 def hybrid_search(
     query: str,
-    store: VectorStore,
-    top_k: int,
-    min_similarity: float = DEFAULT_MIN_SIMILARITY,
-    use_multi_query: bool = False,
-    llm: ChatOllama | None = None,
-) -> RetrievalResult:
-    """Fuse lesson 12 hybrid lists and optional lesson 10 multi-query lists."""
-    clean_query = query.strip()
-    if not clean_query:
-        return RetrievalResult(reason="Please enter a question.")
-    all_chunks = store.all_chunks()
-    if not all_chunks:
-        return RetrievalResult(reason="No documents are indexed yet.")
-
-    candidate_k = max(top_k * 2, 8)
-    queries = generate_query_variations(clean_query, llm=llm) if use_multi_query else [clean_query]
-    ranked_lists: list[list[tuple[Chunk, float]]] = []
-    bm25_scores: dict[str, float] = {}
-    for search_query in queries:
-        vector_results = [(chunk, 1.0) for chunk in store.vector_search(search_query, candidate_k)]
-        bm25_results = keyword_search(search_query, all_chunks, candidate_k)
-        ranked_lists.extend([vector_results, bm25_results])
-        for chunk, score in bm25_results:
-            bm25_scores[chunk.id] = max(score, bm25_scores.get(chunk.id, 0.0))
-    fused = reciprocal_rank_fusion(ranked_lists)
-
-    vector_scores = store.vector_similarity_scores(clean_query, candidate_k)
-    hits = [
-        SearchHit(
-            chunk=chunk,
-            vector_similarity=vector_scores.get(chunk.id),
-            bm25_score=bm25_scores.get(chunk.id),
-            rrf_score=rrf_score,
-        )
-        for chunk, rrf_score in fused[:top_k]
-    ]
-    best_similarity = max(vector_scores.values(), default=-1.0)
-    if not hits:
-        return RetrievalResult(hits=[], sufficient=False, reason="No relevant evidence was retrieved.")
-    if best_similarity < min_similarity:
-        return RetrievalResult(
-            hits=hits,
-            sufficient=False,
-            reason=(
-                f"The closest retrieved chunk scored {best_similarity:.2f}, below the "
-                f"evidence threshold of {min_similarity:.2f}."
-            ),
-        )
-    method = "multi-query hybrid RRF" if use_multi_query else "hybrid RRF"
-    return RetrievalResult(hits=hits, sufficient=True, reason=f"Retrieved evidence passed the similarity threshold using {method}.")
+    db: Chroma,
+    all_documents: List[Document] = None,
+    k: int = 4,
+) -> List[Document]:
+    """Run vector search and BM25 together, merging top results with RRF."""
+    vector_results = vector_search(query, db, k=k * 2)
+    if all_documents:
+        bm25_results = keyword_search(query, all_documents, k=k * 2)
+        fused = reciprocal_rank_fusion([vector_results, bm25_results], k=60)
+        return [doc for doc, score in fused[:k]]
+    return vector_results[:k]
