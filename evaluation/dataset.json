@@ -1,0 +1,137 @@
+[
+  {
+    "id": "T01",
+    "category": "text",
+    "query": "What is Retrieval-Augmented Generation (RAG)?",
+    "ground_truth_source": "rag_test_document_text_and_diagram.pdf",
+    "ground_truth_page": 1,
+    "expected_answer": "Retrieval-Augmented Generation (RAG) is a method that allows a language model to answer questions using information retrieved from an external knowledge source, such as an uploaded document.",
+    "should_refuse": false
+  },
+  {
+    "id": "T02",
+    "category": "text",
+    "query": "Why does a RAG system use embeddings?",
+    "ground_truth_source": "rag_test_document_text_and_diagram.pdf",
+    "ground_truth_page": 1,
+    "expected_answer": "An embedding model converts text into numerical vectors so that similar passages can be stored in a vector database and retrieved based on semantic similarity.",
+    "should_refuse": false
+  },
+  {
+    "id": "T03",
+    "category": "text",
+    "query": "What is the difference between keyword search and semantic search?",
+    "ground_truth_source": "rag_test_document_text_and_diagram.pdf",
+    "ground_truth_page": 2,
+    "expected_answer": "Keyword search finds exact terms, names, and identifiers, while semantic search finds passages with similar meanings even when using different wording.",
+    "should_refuse": false
+  },
+  {
+    "id": "T04",
+    "category": "text",
+    "query": "What does Reciprocal Rank Fusion (RRF) do in hybrid search?",
+    "ground_truth_source": "rag_test_document_text_and_diagram.pdf",
+    "ground_truth_page": 2,
+    "expected_answer": "Reciprocal Rank Fusion (RRF) combines multiple ranked result lists (such as keyword search and semantic vector search) into a single ranking, giving stronger positions more influence.",
+    "should_refuse": false
+  },
+  {
+    "id": "T05",
+    "category": "text",
+    "query": "What are the four main parts of a computer system structure?",
+    "ground_truth_source": "OS_Lessons_1-3_Summary.pdf",
+    "ground_truth_page": 1,
+    "expected_answer": "The four main parts are Hardware, Operating System, Application programs, and Users.",
+    "should_refuse": false
+  },
+  {
+    "id": "T06",
+    "category": "text",
+    "query": "When and where is the local RAG workshop scheduled?",
+    "ground_truth_source": "workshop_notes.txt",
+    "ground_truth_page": 1,
+    "expected_answer": "The workshop is scheduled for 14 November 2026 at 10:00 AM in Room Orchid.",
+    "should_refuse": false
+  },
+  {
+    "id": "M01",
+    "category": "multimodal",
+    "query": "What pipeline stages are shown in the RAG System Pipeline diagram?",
+    "ground_truth_source": "rag_test_document_text_and_diagram.pdf",
+    "ground_truth_page": 1,
+    "expected_answer": "The diagram illustrates the flow from User Question to Embedding, followed by Vector Search retrieving relevant chunks, which are supplied to the Language Model to generate an answer.",
+    "should_refuse": false
+  },
+  {
+    "id": "M02",
+    "category": "multimodal",
+    "query": "What service and tagline are shown in the Meet Seva graphic?",
+    "ground_truth_source": "#1_Meet Seva.png",
+    "ground_truth_page": 1,
+    "expected_answer": "The graphic promotes 'MEET SEVA' with the concept or tagline 'Local Services in One Tap'.",
+    "should_refuse": false
+  },
+  {
+    "id": "M03",
+    "category": "multimodal",
+    "query": "In the RAG pipeline diagram, what happens after the user question is converted into an embedding?",
+    "ground_truth_source": "rag_test_document_text_and_diagram.pdf",
+    "ground_truth_page": 1,
+    "expected_answer": "Vector search uses the embedding to retrieve relevant chunks from the database.",
+    "should_refuse": false
+  },
+  {
+    "id": "M04",
+    "category": "multimodal",
+    "query": "What visual evidence is provided on page 1 of the RAG test document?",
+    "ground_truth_source": "rag_test_document_text_and_diagram.pdf",
+    "ground_truth_page": 1,
+    "expected_answer": "A diagram illustrating the RAG System Pipeline showing the flow from user question to vector search and answer generation.",
+    "should_refuse": false
+  },
+  {
+    "id": "M05",
+    "category": "multimodal",
+    "query": "What kind of data structure or operation is depicted in the Doc1 visual snippet?",
+    "ground_truth_source": "Doc1.pdf",
+    "ground_truth_page": 1,
+    "expected_answer": "It depicts a tabular or DataFrame structure defining variables, operations, and index manipulations.",
+    "should_refuse": false
+  },
+  {
+    "id": "N01",
+    "category": "refusal",
+    "query": "What is the name of the professor who wrote the RAG test document?",
+    "ground_truth_source": "rag_test_document_text_and_diagram.pdf",
+    "ground_truth_page": 2,
+    "expected_answer": "I don't have enough information to answer that question based on the provided documents.",
+    "should_refuse": true
+  },
+  {
+    "id": "N02",
+    "category": "refusal",
+    "query": "What is the tuition fee for the Operating Systems course?",
+    "ground_truth_source": "OS_Lessons_1-3_Summary.pdf",
+    "ground_truth_page": 1,
+    "expected_answer": "I don't have enough information to answer that question based on the provided documents.",
+    "should_refuse": true
+  },
+  {
+    "id": "N03",
+    "category": "refusal",
+    "query": "What is the Wi-Fi password for Room Orchid during the workshop?",
+    "ground_truth_source": "workshop_notes.txt",
+    "ground_truth_page": 1,
+    "expected_answer": "I don't have enough information to answer that question based on the provided documents.",
+    "should_refuse": true
+  },
+  {
+    "id": "N04",
+    "category": "refusal",
+    "query": "Which AWS S3 bucket stores the processed embeddings?",
+    "ground_truth_source": "architecture.md",
+    "ground_truth_page": 1,
+    "expected_answer": "I don't have enough information to answer that question based on the provided documents.",
+    "should_refuse": true
+  }
+]
