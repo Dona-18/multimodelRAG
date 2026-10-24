@@ -73,6 +73,20 @@ def test_pdf_loading(tmp_path: Path):
     assert isinstance(docs, list)
 
 
+def test_multimodal_image_loading(tmp_path: Path):
+    """Verify loading standalone image files and extracting visual content."""
+    img_path = tmp_path / "chart.png"
+    from PIL import Image
+    im = Image.new("RGB", (100, 100), color="blue")
+    im.save(img_path)
+
+    with patch("src.ingestion.describe_image", return_value="A blue chart showing 50% growth."):
+        docs = load_any_document(img_path)
+        assert len(docs) == 1
+        assert docs[0].metadata["type"] == "image"
+        assert "blue chart" in docs[0].page_content
+
+
 def test_vector_store_and_search(tmp_path: Path):
     """Verify adding documents to ChromaDB and performing vector search."""
     fake_embeddings = MagicMock()

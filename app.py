@@ -74,7 +74,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.header("📁 Upload Document")
-    uploaded_file = st.file_uploader("Upload PDF, DOCX, or TXT", type=["pdf", "docx", "txt", "md"])
+    uploaded_file = st.file_uploader("Upload PDF, DOCX, TXT, or Image", type=["pdf", "docx", "txt", "md", "png", "jpg", "jpeg", "webp"])
     if st.button("📥 Process Uploaded File", use_container_width=True):
         if uploaded_file:
             save_path = UPLOADS_DIR / uploaded_file.name
