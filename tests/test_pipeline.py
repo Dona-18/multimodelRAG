@@ -8,14 +8,20 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 from pypdf import PdfWriter
 
-from src.active_source import clear_active_source, load_active_source, save_active_source
 from src.generation import INSUFFICIENT_EVIDENCE_MESSAGE, answer_question, stream_answer
-from src.index_state import load_index_settings, requires_reingestion, save_index_settings
 from src.ingestion import load_document, make_chunks, recursive_character_chunks
 from src.retrieval import generate_query_variations, hybrid_search, reciprocal_rank_fusion
 from src.settings import GenerationSettings, IndexSettings, RetrievalSettings
+from src.state import (
+    chat_is_unlocked,
+    clear_active_source,
+    load_active_source,
+    load_index_settings,
+    requires_reingestion,
+    save_active_source,
+    save_index_settings,
+)
 from src.types import Chunk, RetrievalResult, SearchHit
-from src.ui_state import chat_is_unlocked
 from src.vector_store import VectorStore
 
 
@@ -169,7 +175,7 @@ def test_advanced_settings_validate_and_apply_to_streaming_path() -> None:
 
 def test_chunk_settings_change_requires_reingestion(monkeypatch, tmp_path: Path) -> None:
     state_path = tmp_path / "index_settings.json"
-    monkeypatch.setattr("src.index_state.INDEX_SETTINGS_PATH", state_path)
+    monkeypatch.setattr("src.state.INDEX_SETTINGS_PATH", state_path)
     original = IndexSettings(chunk_size=1000, chunk_overlap=150)
     save_index_settings(original)
     assert load_index_settings() == original
@@ -181,8 +187,8 @@ def test_active_source_keeps_only_the_latest_project_upload(monkeypatch, tmp_pat
     uploads = tmp_path / "uploads"
     uploads.mkdir()
     state_path = tmp_path / "active_source.json"
-    monkeypatch.setattr("src.active_source.UPLOADS_DIR", uploads)
-    monkeypatch.setattr("src.active_source.ACTIVE_SOURCE_PATH", state_path)
+    monkeypatch.setattr("src.state.UPLOADS_DIR", uploads)
+    monkeypatch.setattr("src.state.ACTIVE_SOURCE_PATH", state_path)
 
     first = uploads / "first.txt"
     second = uploads / "second.txt"

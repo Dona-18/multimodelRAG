@@ -5,7 +5,6 @@ from pathlib import Path
 
 import streamlit as st
 
-from src.active_source import clear_active_source, load_active_source, save_active_source
 from src.config import (
     DEFAULT_CHUNK_OVERLAP,
     DEFAULT_CHUNK_SIZE,
@@ -25,13 +24,20 @@ from src.config import (
     MODEL_MAX_CONTEXT_LENGTH,
 )
 from src.generation import answer_question, make_answer_result, stream_answer
-from src.index_state import load_index_settings, requires_reingestion, save_index_settings
 from src.ingestion import DocumentLoadError, load_document, make_chunks, save_upload
 from src.multimodal import build_pdf_chunks
 from src.ollama_client import LocalOllama, OllamaUnavailableError
 from src.retrieval import hybrid_search
 from src.settings import GenerationSettings, IndexSettings, RetrievalSettings
-from src.ui_state import chat_is_unlocked
+from src.state import (
+    chat_is_unlocked,
+    clear_active_source,
+    load_active_source,
+    load_index_settings,
+    requires_reingestion,
+    save_active_source,
+    save_index_settings,
+)
 from src.vector_store import VectorStore
 
 st.set_page_config(page_title="Multimodal RAG Assistant", page_icon="📚", layout="centered")
