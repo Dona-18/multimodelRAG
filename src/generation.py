@@ -1,5 +1,5 @@
-"""Simple answer generation using Ollama."""
-from typing import List, Dict, Any
+"""Grounded answer generation using Ollama."""
+from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
 from langchain_ollama import ChatOllama
 from src.config import LLM_MODEL, OLLAMA_URL
@@ -32,10 +32,10 @@ def generate_grounded_answer(
     query: str,
     retrieved_documents: List[Document],
     temperature: float = 0.1,
-    model: str = LLM_MODEL,
+    model: Optional[str] = None,
     **kwargs,
 ) -> Dict[str, Any]:
-    """Generate grounded answer using local Ollama model."""
+    """Generate grounded answer using local Ollama model (defaulting to Qwen3)."""
     if not retrieved_documents:
         return {
             "answer": "I don't have enough information to answer that question based on the provided documents.",
@@ -43,6 +43,7 @@ def generate_grounded_answer(
             "documents": [],
         }
 
+    active_model = model or LLM_MODEL
     context = format_context_blocks(retrieved_documents)
     prompt = f"""Based on the following documents, answer this question: {query}
 
@@ -53,11 +54,14 @@ Provide a concise answer using only the documents above.
 Cite the source and page for key facts, e.g. [Source: filename, Page: X].
 If the answer is not in the documents, say "I don't have enough information to answer that question based on the provided documents."
 """
-    llm = ChatOllama(model=model, temperature=temperature, base_url=OLLAMA_URL)
+    llm = ChatOllama(model=active_model, temperature=temperature, base_url=OLLAMA_URL)
     response = llm.invoke(prompt)
 
+    # In case thinking/reasoning models output special tokens or structure
+    answer_text = response.content.strip()
+
     return {
-        "answer": response.content.strip(),
+        "answer": answer_text,
         "citations": extract_citations(retrieved_documents),
         "documents": retrieved_documents,
     }

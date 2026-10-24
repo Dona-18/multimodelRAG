@@ -10,10 +10,10 @@ from pypdf import PdfReader
 from PIL import Image
 import ollama
 
-from src.config import IMAGES_DIR, LLM_MODEL, OLLAMA_URL
+from src.config import IMAGES_DIR, VISION_MODEL, OLLAMA_URL
 
 
-def describe_image(image_bytes: bytes) -> str:
+def describe_image(image_bytes: bytes, vision_model: str = None) -> str:
     """Analyze image, chart, or diagram with local vision LLM."""
     try:
         pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
@@ -24,9 +24,10 @@ def describe_image(image_bytes: bytes) -> str:
         pil_img.save(buf, format="JPEG")
         jpeg_bytes = buf.getvalue()
 
+        v_model = vision_model or VISION_MODEL
         client = ollama.Client(host=OLLAMA_URL)
         response = client.chat(
-            model=LLM_MODEL,
+            model=v_model,
             messages=[{
                 "role": "user",
                 "content": (

@@ -2,9 +2,9 @@
 
 Simple, beginner-friendly RAG workflow:
 1. Ingestion: Attach documents directly in the chat UI
-2. Storage: ChromaDB vector store
+2. Storage: ChromaDB vector store with isolated collections per embedding model
 3. Retrieval: Hybrid search (Vector + BM25 keyword + RRF)
-4. Generation: Grounded answers with Ollama LLM and visual citations
+4. Generation: Grounded answers with Qwen3 / Gemma and visual citations
 """
 import sys
 from pathlib import Path
@@ -16,7 +16,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import UPLOADS_DIR, CHROMA_DIR, LLM_MODEL, EMBEDDING_MODEL, OLLAMA_URL
+from src.config import (
+    UPLOADS_DIR,
+    CHROMA_DIR,
+    OLLAMA_URL,
+    MODEL_PROFILES,
+    DEFAULT_PROFILE,
+)
 from src.ingestion import load_any_document, split_documents
 from src.vector_store import (
     get_vector_store,
@@ -42,52 +48,17 @@ def check_ollama_status() -> bool:
         return False
 
 
-# Cache vector store connection across reruns to avoid SQLite lock issues
+# Cache vector store connection per collection and embedding model to avoid SQLite lock issues
 @st.cache_resource
-def load_vector_store():
-    return get_vector_store(CHROMA_DIR)
+def load_vector_store(collection_name: str, embedding_model: str):
+    return get_vector_store(
+        persist_directory=CHROMA_DIR,
+        collection_name=collection_name,
+        embedding_model=embedding_model,
+    )
 
 
-db = load_vector_store()
-
-# State management
-if "all_documents" not in st.session_state:
-    st.session_state.all_documents = []
-
-# Load existing documents if not already loaded
-if not st.session_state.all_documents:
-    st.session_state.all_documents = get_all_stored_documents(db)
-
-# Initialize chat messages with a welcoming assistant message
-if "messages" not in st.session_state or len(st.session_state.messages) == 0:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": (
-                "👋 **Welcome to Multimodal RAG Assistant!**\n\n"
-                "Upload a PDF, DOCX, TXT, or image in the box above or attach one "
-                "in the chat bar below. I will extract text, diagrams, and images "
-                "so you can ask questions with visual citations."
-            ),
-        }
-    ]
-
-has_docs = len(st.session_state.all_documents) > 0
-
-
-def process_and_index_file(name: str, file_bytes: bytes, chunk_size: int, chunk_overlap: int):
-    """Helper to save, process, chunk, and index an uploaded document."""
-    save_path = UPLOADS_DIR / name
-    save_path.write_bytes(file_bytes)
-    docs = load_any_document(save_path)
-    chunks = split_documents(docs, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    add_documents_to_store(chunks, db)
-    st.session_state.all_documents = get_all_stored_documents(db)
-    img_count = sum(1 for d in docs if d.metadata.get("type") == "image")
-    return len(chunks), img_count
-
-
-# --- SIDEBAR: STATUS & PARAMETERS ---
+# --- SIDEBAR: STATUS, MODEL PROFILES & PARAMETERS ---
 with st.sidebar:
     st.header("⚙️ Status")
     if check_ollama_status():
@@ -95,10 +66,24 @@ with st.sidebar:
     else:
         st.error("Service: Offline (run `ollama serve`)")
 
+    st.markdown("---")
+    st.header("🤖 Model Configuration")
+    profile_keys = list(MODEL_PROFILES.keys())
+    active_profile_key = st.selectbox(
+        "Active Model Profile",
+        options=profile_keys,
+        format_func=lambda k: MODEL_PROFILES[k]["name"],
+        index=0,
+        help="Switch between Qwen3 (default) and Gemma 4 / Nomic (legacy fallback)",
+    )
+    active_profile = MODEL_PROFILES[active_profile_key]
+
     with st.expander("System Details", expanded=False):
-        st.caption(f"**LLM:** `{LLM_MODEL}`")
-        st.caption(f"**Embeddings:** `{EMBEDDING_MODEL}`")
-        st.caption(f"**Processed Chunks:** `{len(st.session_state.all_documents)}`")
+        st.caption(f"**Profile:** `{active_profile['name']}`")
+        st.caption(f"**LLM:** `{active_profile['llm']}`")
+        st.caption(f"**Embeddings:** `{active_profile['embedding']}` ({active_profile['embedding_dim']} dims)")
+        st.caption(f"**Vision Captioner:** `{active_profile['vision']}`")
+        st.caption(f"**Collection:** `{active_profile['collection']}`")
 
     st.markdown("---")
     st.header("⚙️ Parameters")
@@ -136,18 +121,53 @@ with st.sidebar:
             help="Character overlap between chunks",
         )
 
+# Load database specific to the selected profile collection
+db = load_vector_store(
+    collection_name=active_profile["collection"],
+    embedding_model=active_profile["embedding"],
+)
+
+# State management
+if "messages" not in st.session_state or len(st.session_state.messages) == 0:
+    st.session_state.messages = [
+        {
+            "role": "assistant",
+            "content": (
+                f"👋 **Welcome to Multimodal RAG Assistant!**\n\n"
+                f"Active model: **{active_profile['name']}**.\n\n"
+                "Upload a PDF, DOCX, TXT, or image above to ask questions with citations and visual evidence."
+            ),
+        }
+    ]
+
+# Fetch stored documents for active collection
+all_documents = get_all_stored_documents(db)
+has_docs = len(all_documents) > 0
+
+with st.sidebar:
+    st.caption(f"**Indexed Chunks:** `{len(all_documents)}`")
     st.markdown("---")
-    if st.button("🗑️ Clear Conversation & Documents", width="stretch"):
+    if st.button("🗑️ Clear Current Collection & Chat", width="stretch"):
         clear_vector_store(db)
-        st.session_state.all_documents = []
         st.session_state.messages = [
             {
                 "role": "assistant",
-                "content": "Cleared all documents and history. Attach a document to start again!",
+                "content": f"Cleared all documents in `{active_profile['collection']}`. Attach a document to start again!",
             }
         ]
-        st.success("Database cleared!")
+        st.success(f"Collection `{active_profile['collection']}` cleared!")
         st.rerun()
+
+
+def process_and_index_file(name: str, file_bytes: bytes, c_size: int, c_overlap: int):
+    """Helper to save, process, chunk, and index an uploaded document."""
+    save_path = UPLOADS_DIR / name
+    save_path.write_bytes(file_bytes)
+    docs = load_any_document(save_path)
+    chunks = split_documents(docs, chunk_size=c_size, chunk_overlap=c_overlap)
+    add_documents_to_store(chunks, db)
+    img_count = sum(1 for d in docs if d.metadata.get("type") == "image")
+    return len(chunks), img_count
 
 
 # --- MAIN SCREEN: CHAT UI ---
@@ -161,7 +181,7 @@ with st.container(border=True):
         "Upload PDF, DOCX, TXT, or Image",
         type=["pdf", "docx", "txt", "md", "png", "jpg", "jpeg", "webp"],
         label_visibility="collapsed",
-        key="main_doc_uploader",
+        key=f"uploader_{active_profile_key}",
     )
 
     if uploaded_file is not None:
@@ -181,20 +201,19 @@ with st.container(border=True):
                     chunk_overlap,
                 )
 
-            # Record confirmation into chat messages so conversation reflects the upload
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": (
                     f"✅ Processed **`{uploaded_file.name}`** into {num_chunks} chunks "
-                    f"(including {img_count} visual diagrams/images)!\n\n"
+                    f"(including {img_count} visual diagrams/images) using `{active_profile['embedding']}`!\n\n"
                     "You can now ask any question about this document below."
                 ),
             })
             st.rerun()
 
 if has_docs:
-    sources = list(dict.fromkeys(d.metadata.get("source", "Doc") for d in st.session_state.all_documents))
-    st.caption(f"🟢 **Ready to chat!** {len(st.session_state.all_documents)} chunks indexed from: `{'`, `'.join(sources)}`")
+    sources = list(dict.fromkeys(d.metadata.get("source", "Doc") for d in all_documents))
+    st.caption(f"🟢 **Ready to chat!** {len(all_documents)} chunks indexed in `{active_profile['collection']}` from: `{'`, `'.join(sources)}`")
 
 st.markdown("---")
 
@@ -230,14 +249,12 @@ if submission:
     user_text = ""
     attached_files = []
 
-    # Handle string or ChatInputValue object
     if hasattr(submission, "text"):
         user_text = (submission.text or "").strip()
         attached_files = getattr(submission, "files", []) or []
     elif isinstance(submission, str):
         user_text = submission.strip()
 
-    # Process any attached files from the chat input
     if attached_files:
         for f in attached_files:
             with st.spinner(f"Processing attachment `{f.name}`..."):
@@ -255,31 +272,30 @@ if submission:
                 ),
             })
 
-    # Handle text question if provided
     if user_text:
-        # Render and record user message
         st.session_state.messages.append({"role": "user", "content": user_text})
         with st.chat_message("user"):
             st.markdown(user_text)
 
-        # Generate response
         with st.chat_message("assistant"):
-            if not st.session_state.all_documents:
-                no_doc_msg = "⚠️ No documents uploaded yet. Please upload or attach a document first so I have context to answer your question."
+            current_docs = get_all_stored_documents(db)
+            if not current_docs:
+                no_doc_msg = "⚠️ No documents indexed in the current collection. Please upload a document first."
                 st.markdown(no_doc_msg)
                 st.session_state.messages.append({"role": "assistant", "content": no_doc_msg})
             else:
-                with st.spinner("Searching document & generating grounded answer..."):
+                with st.spinner(f"Searching `{active_profile['name']}` & generating grounded answer..."):
                     retrieved_docs = hybrid_search(
                         user_text,
                         db,
-                        st.session_state.all_documents,
+                        current_docs,
                         k=top_k,
                     )
                     result = generate_grounded_answer(
                         user_text,
                         retrieved_docs,
                         temperature=temperature,
+                        model=active_profile["llm"],
                     )
                     answer = result["answer"]
 
