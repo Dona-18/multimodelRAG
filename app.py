@@ -80,13 +80,23 @@ with st.sidebar:
         "Upload PDF, DOCX, TXT, or Image",
         type=["pdf", "docx", "txt", "md", "png", "jpg", "jpeg", "webp"],
     )
+
+    st.markdown("---")
+    st.header("⚙️ Parameters")
+    top_k = st.slider("Retrieved Chunks (k)", min_value=1, max_value=8, value=4, help="Number of evidence chunks retrieved for context")
+    temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.05, help="Lower values give strictly factual answers")
+
+    with st.expander("Chunking Settings", expanded=False):
+        chunk_size = st.slider("Chunk Size", min_value=300, max_value=2000, value=1000, step=100, help="Character limit per text chunk")
+        chunk_overlap = st.slider("Chunk Overlap", min_value=50, max_value=400, value=150, step=25, help="Character overlap between chunks")
+
     if st.button("📥 Process Uploaded File", use_container_width=True):
         if uploaded_file:
             save_path = UPLOADS_DIR / uploaded_file.name
             save_path.write_bytes(uploaded_file.getbuffer())
             with st.spinner("Processing file and extracting visual content..."):
                 docs = load_any_document(save_path)
-                chunks = split_documents(docs)
+                chunks = split_documents(docs, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 add_documents_to_store(chunks, db)
                 st.session_state.all_documents = get_all_stored_documents(db)
 
@@ -141,8 +151,8 @@ if user_query and has_docs:
 
     # 2. Retrieve & generate answer
     with st.spinner("Searching documents & generating answer..."):
-        retrieved_docs = hybrid_search(user_query, db, st.session_state.all_documents, k=4)
-        result = generate_grounded_answer(user_query, retrieved_docs)
+        retrieved_docs = hybrid_search(user_query, db, st.session_state.all_documents, k=top_k)
+        result = generate_grounded_answer(user_query, retrieved_docs, temperature=temperature)
         answer = result["answer"]
 
     # 3. Add assistant message
