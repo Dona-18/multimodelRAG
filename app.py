@@ -7,6 +7,7 @@ Simple, beginner-friendly RAG workflow:
 4. Generation: Grounded answers with Ollama LLM and visual citations
 """
 import sys
+import json
 from pathlib import Path
 import urllib.request
 import streamlit as st
@@ -42,52 +43,31 @@ def check_ollama_status() -> bool:
         return False
 
 
+def get_installed_ollama_models() -> list[str]:
+    """Fetch installed models from local Ollama instance."""
+    try:
+        url = f"{OLLAMA_URL}/api/tags"
+        req = urllib.request.Request(url, headers={"User-Agent": "StreamlitRAG"})
+        with urllib.request.urlopen(req, timeout=2) as res:
+            if res.status == 200:
+                data = json.loads(res.read().decode())
+                return [m["name"] for m in data.get("models", [])]
+    except Exception:
+        pass
+    return []
+
+
 # Cache vector store connection across reruns to avoid SQLite lock issues
 @st.cache_resource
-def load_vector_store():
-    return get_vector_store(CHROMA_DIR)
+def load_vector_store(embedding_model: str = EMBEDDING_MODEL):
+    return get_vector_store(CHROMA_DIR, embedding_model=embedding_model)
 
-
-db = load_vector_store()
 
 # State management
 if "all_documents" not in st.session_state:
     st.session_state.all_documents = []
 
-# Load existing documents if not already loaded
-if not st.session_state.all_documents:
-    st.session_state.all_documents = get_all_stored_documents(db)
-
-# Initialize chat messages with a welcoming assistant message
-if "messages" not in st.session_state or len(st.session_state.messages) == 0:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": (
-                "👋 **Welcome to Multimodal RAG Assistant!**\n\n"
-                "Upload a PDF, DOCX, TXT, or image in the box above or attach one "
-                "in the chat bar below. I will extract text, diagrams, and images "
-                "so you can ask questions with visual citations."
-            ),
-        }
-    ]
-
-has_docs = len(st.session_state.all_documents) > 0
-
-
-def process_and_index_file(name: str, file_bytes: bytes, chunk_size: int, chunk_overlap: int):
-    """Helper to save, process, chunk, and index an uploaded document."""
-    save_path = UPLOADS_DIR / name
-    save_path.write_bytes(file_bytes)
-    docs = load_any_document(save_path)
-    chunks = split_documents(docs, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    add_documents_to_store(chunks, db)
-    st.session_state.all_documents = get_all_stored_documents(db)
-    img_count = sum(1 for d in docs if d.metadata.get("type") == "image")
-    return len(chunks), img_count
-
-
-# --- SIDEBAR: STATUS & PARAMETERS ---
+# --- SIDEBAR: STATUS, MODEL SELECTION & PARAMETERS ---
 with st.sidebar:
     st.header("⚙️ Status")
     if check_ollama_status():
@@ -95,9 +75,32 @@ with st.sidebar:
     else:
         st.error("Ollama: Offline (run `ollama serve`)")
 
-    st.caption(f"**LLM:** `{LLM_MODEL}`")
-    st.caption(f"**Embeddings:** `{EMBEDDING_MODEL}`")
-    st.caption(f"**Processed Chunks:** `{len(st.session_state.all_documents)}`")
+    # Fetch installed models dynamically
+    installed = get_installed_ollama_models()
+
+    llm_candidates = [m for m in installed if "embed" not in m]
+    fallback_llms = ["gemma4:e2b-mlx", "qwen2.5:7b", "llama3.1:8b", "mistral:latest"]
+    llm_options = list(dict.fromkeys(llm_candidates + [LLM_MODEL] + fallback_llms))
+
+    embed_candidates = [m for m in installed if "embed" in m or "bge" in m]
+    fallback_embeds = ["nomic-embed-text:latest", "bge-m3:latest", "all-minilm:latest"]
+    embedding_options = list(dict.fromkeys(embed_candidates + [EMBEDDING_MODEL] + fallback_embeds))
+
+    selected_llm = st.selectbox(
+        "LLM",
+        options=llm_options,
+        index=llm_options.index(LLM_MODEL) if LLM_MODEL in llm_options else 0,
+        help="Select the LLM for grounded answer generation and vision descriptions",
+    )
+
+    selected_embedding = st.selectbox(
+        "Embeddings",
+        options=embedding_options,
+        index=embedding_options.index(EMBEDDING_MODEL) if EMBEDDING_MODEL in embedding_options else 0,
+        help="Select the embedding model for vector storage and retrieval",
+    )
+
+    chunks_placeholder = st.empty()
 
     st.markdown("---")
     st.header("⚙️ Parameters")
@@ -137,7 +140,8 @@ with st.sidebar:
 
     st.markdown("---")
     if st.button("🗑️ Clear Conversation & Documents", width="stretch"):
-        clear_vector_store(db)
+        db_to_clear = load_vector_store(selected_embedding)
+        clear_vector_store(db_to_clear)
         st.session_state.all_documents = []
         st.session_state.messages = [
             {
@@ -147,6 +151,45 @@ with st.sidebar:
         ]
         st.success("Database cleared!")
         st.rerun()
+
+
+# Load vector store using the user's selected embedding model
+db = load_vector_store(selected_embedding)
+
+# Load existing documents if not already loaded
+if not st.session_state.all_documents:
+    st.session_state.all_documents = get_all_stored_documents(db)
+
+# Update chunks counter in sidebar
+chunks_placeholder.caption(f"**Processed Chunks:** `{len(st.session_state.all_documents)}`")
+
+# Initialize chat messages with a welcoming assistant message
+if "messages" not in st.session_state or len(st.session_state.messages) == 0:
+    st.session_state.messages = [
+        {
+            "role": "assistant",
+            "content": (
+                "👋 **Welcome to Multimodal RAG Assistant!**\n\n"
+                "Upload a PDF, DOCX, TXT, or image in the box above or attach one "
+                "in the chat bar below. I will extract text, diagrams, and images "
+                "so you can ask questions with visual citations."
+            ),
+        }
+    ]
+
+has_docs = len(st.session_state.all_documents) > 0
+
+
+def process_and_index_file(name: str, file_bytes: bytes, chunk_size: int, chunk_overlap: int):
+    """Helper to save, process, chunk, and index an uploaded document."""
+    save_path = UPLOADS_DIR / name
+    save_path.write_bytes(file_bytes)
+    docs = load_any_document(save_path)
+    chunks = split_documents(docs, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    add_documents_to_store(chunks, db)
+    st.session_state.all_documents = get_all_stored_documents(db)
+    img_count = sum(1 for d in docs if d.metadata.get("type") == "image")
+    return len(chunks), img_count
 
 
 # --- MAIN SCREEN: CHAT UI ---
@@ -279,6 +322,7 @@ if submission:
                         user_text,
                         retrieved_docs,
                         temperature=temperature,
+                        model=selected_llm,
                     )
                     answer = result["answer"]
 

@@ -32,6 +32,7 @@ def generate_grounded_answer(
     query: str,
     retrieved_documents: List[Document],
     temperature: float = 0.1,
+    model: str = LLM_MODEL,
     **kwargs,
 ) -> Dict[str, Any]:
     """Generate grounded answer using local Ollama model."""
@@ -52,7 +53,7 @@ Provide a concise answer using only the documents above.
 Cite the source and page for key facts, e.g. [Source: filename, Page: X].
 If the answer is not in the documents, say "I don't have enough information to answer that question based on the provided documents."
 """
-    llm = ChatOllama(model=LLM_MODEL, temperature=temperature, base_url=OLLAMA_URL)
+    llm = ChatOllama(model=model, temperature=temperature, base_url=OLLAMA_URL)
     response = llm.invoke(prompt)
 
     return {

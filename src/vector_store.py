@@ -12,6 +12,7 @@ from src.config import CHROMA_DIR, EMBEDDING_MODEL, OLLAMA_URL
 def get_vector_store(
     persist_directory: Union[str, Path] = CHROMA_DIR,
     collection_name: str = "multimodal_documents",
+    embedding_model: str = EMBEDDING_MODEL,
 ) -> Chroma:
     """Connect to or create a ChromaDB vector store."""
     client = chromadb.PersistentClient(
@@ -21,7 +22,7 @@ def get_vector_store(
     return Chroma(
         client=client,
         embedding_function=OllamaEmbeddings(
-            model=EMBEDDING_MODEL,
+            model=embedding_model,
             base_url=OLLAMA_URL,
         ),
         collection_name=collection_name,
