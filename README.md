@@ -3,7 +3,7 @@ title: Multimodel RAG
 emoji: 📚
 colorFrom: blue
 colorTo: indigo
-sdk: gradio
+sdk: streamlit
 app_file: app.py
 pinned: false
 ---
@@ -56,10 +56,10 @@ python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
 .venv/bin/pytest -q
-.venv/bin/python app.py
+.venv/bin/streamlit run app.py
 ```
 
-Open the local URL Gradio prints (normally `http://127.0.0.1:7860`).
+Open the local URL Streamlit prints (normally `http://localhost:8501`).
 
 ## How to use the app
 

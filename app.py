@@ -1,194 +1,154 @@
-"""Gradio Web Application for Local Multimodal RAG Assistant."""
-import shutil
-import urllib.request
+"""Streamlit Web Application for Local Multimodal RAG Assistant.
+
+Simple, beginner-friendly RAG workflow:
+1. Ingestion: Upload documents (PDF, DOCX, TXT, images)
+2. Storage: ChromaDB vector store
+3. Retrieval: Hybrid search (Vector + BM25 keyword + RRF)
+4. Generation: Grounded answers with Ollama LLM
+"""
+import sys
 from pathlib import Path
-from typing import List
+import urllib.request
+import streamlit as st
 
-import gradio as gr
+# Setup paths
+PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import CHROMA_DIR, EMBEDDING_MODEL, LLM_MODEL, OLLAMA_URL, UPLOADS_DIR
-from src.generation import generate_grounded_answer
+from src.config import UPLOADS_DIR, CHROMA_DIR, LLM_MODEL, EMBEDDING_MODEL, OLLAMA_URL
 from src.ingestion import load_any_document, split_documents
-from src.retrieval import hybrid_search
 from src.vector_store import (
-    add_documents_to_store,
-    clear_vector_store,
-    get_all_stored_documents,
     get_vector_store,
+    add_documents_to_store,
+    get_all_stored_documents,
+    clear_vector_store,
 )
+from src.retrieval import hybrid_search
+from src.generation import generate_grounded_answer
 
-# Connect to ChromaDB
-db = get_vector_store(CHROMA_DIR)
-all_documents = get_all_stored_documents(db)
+# Page config
+st.set_page_config(page_title="Multimodal RAG Assistant", layout="centered")
 
 
-def check_ollama_status() -> str:
+def check_ollama_status() -> bool:
     """Check if local Ollama server is running."""
     try:
         url = f"{OLLAMA_URL}/api/tags"
-        req = urllib.request.Request(url, headers={"User-Agent": "GradioRAG"})
+        req = urllib.request.Request(url, headers={"User-Agent": "StreamlitRAG"})
         with urllib.request.urlopen(req, timeout=2) as res:
-            if res.status == 200:
-                return "🟢 **Ollama:** Online"
+            return res.status == 200
     except Exception:
-        pass
-    return "🔴 **Ollama:** Offline (`ollama serve` required)"
+        return False
 
 
-def get_current_chunk_status() -> str:
-    """Return status line showing processed chunk count."""
-    if not all_documents:
-        return "**Processed Chunks:** 0"
-    sources = list(dict.fromkeys(d.metadata.get("source", "Doc") for d in all_documents))
-    return f"🟢 **Processed Chunks:** {len(all_documents)} (`{', '.join(sources)}`)"
+# Cache vector store connection across reruns to avoid SQLite lock issues
+@st.cache_resource
+def load_vector_store():
+    return get_vector_store(CHROMA_DIR)
 
 
-def process_file(uploaded_file):
-    """Process an uploaded document or image into ChromaDB."""
-    global all_documents
-    if not uploaded_file:
-        return "⚠️ Please upload a document or image first.", get_current_chunk_status()
+db = load_vector_store()
 
-    file_path = Path(uploaded_file.name if hasattr(uploaded_file, "name") else uploaded_file)
-    destination = UPLOADS_DIR / file_path.name
-    shutil.copy(file_path, destination)
+# State management
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "all_documents" not in st.session_state:
+    st.session_state.all_documents = []
 
-    docs = load_any_document(destination)
-    if not docs:
-        return f"⚠️ No text or visual content could be extracted from `{file_path.name}`.", get_current_chunk_status()
+# Load existing documents if not already loaded
+if not st.session_state.all_documents:
+    st.session_state.all_documents = get_all_stored_documents(db)
 
-    chunks = split_documents(docs)
-    add_documents_to_store(chunks, db)
-    all_documents = get_all_stored_documents(db)
+has_docs = len(st.session_state.all_documents) > 0
 
-    img_count = sum(1 for d in docs if d.metadata.get("type") == "image")
-    if img_count > 0:
-        msg = f"✅ Processed `{file_path.name}`: {len(chunks)} chunks (including {img_count} visual diagrams/images)!"
+# --- SIDEBAR ---
+with st.sidebar:
+    st.header("⚙️ Status")
+    if check_ollama_status():
+        st.success("Ollama: Online")
     else:
-        msg = f"✅ Processed `{file_path.name}`: {len(chunks)} chunks successfully!"
+        st.error("Ollama: Offline (run `ollama serve`)")
 
-    return msg, get_current_chunk_status()
+    st.caption(f"**LLM:** `{LLM_MODEL}`")
+    st.caption(f"**Embeddings:** `{EMBEDDING_MODEL}`")
+    st.caption(f"**Processed Chunks:** `{len(st.session_state.all_documents)}`")
 
-
-def clear_documents():
-    """Clear all processed documents from ChromaDB."""
-    global all_documents
-    clear_vector_store(db)
-    all_documents = []
-    return "🗑️ All documents cleared from database.", "**Processed Chunks:** 0", []
-
-
-def chat_response(message: str, history: List[dict]):
-    """Retrieve evidence and generate grounded answer."""
-    global all_documents
-    clean_message = (message or "").strip()
-    if not clean_message:
-        return "", history
-
-    if not all_documents:
-        history.append({"role": "user", "content": clean_message})
-        history.append({
-            "role": "assistant",
-            "content": "⚠️ No documents processed yet. Please upload a PDF, DOCX, TXT, or image in the left panel first.",
-        })
-        return "", history
-
-    # 1. Retrieve evidence
-    retrieved_docs = hybrid_search(clean_message, db, all_documents, k=4)
-    result = generate_grounded_answer(clean_message, retrieved_docs)
-    answer = result["answer"]
-
-    # 2. Build citations & evidence collapsible section
-    evidence_parts = []
-    for i, doc in enumerate(retrieved_docs, 1):
-        source = doc.metadata.get("source", "Unknown")
-        page = doc.metadata.get("page", 1)
-        image_path = doc.metadata.get("image_path")
-
-        part = f"**Evidence #{i} — `{source}` (Page {page})**\n\n"
-        if image_path and Path(image_path).exists():
-            part += f"![Extracted Image](/gradio_api/file={image_path})\n\n"
-        part += f"{doc.page_content.strip()}"
-        evidence_parts.append(part)
-
-    if evidence_parts:
-        evidence_text = "\n\n---\n\n".join(evidence_parts)
-        full_reply = (
-            f"{answer}\n\n"
-            f"<details><summary>🔍 <b>Citations & Evidence ({len(retrieved_docs)} chunks)</b></summary>\n\n"
-            f"{evidence_text}\n\n"
-            f"</details>"
-        )
-    else:
-        full_reply = answer
-
-    history.append({"role": "user", "content": clean_message})
-    history.append({"role": "assistant", "content": full_reply})
-    return "", history
-
-
-# Build Gradio UI
-with gr.Blocks(title="Multimodal RAG Assistant") as demo:
-    gr.Markdown("# Multimodal RAG Assistant")
-
-    with gr.Row():
-        # Left sidebar column
-        with gr.Column(scale=1):
-            gr.Markdown("### ⚙️ System Status")
-            ollama_status = gr.Markdown(check_ollama_status())
-            gr.Markdown(f"- **LLM:** `{LLM_MODEL}`\n- **Embeddings:** `{EMBEDDING_MODEL}`")
-            chunk_status = gr.Markdown(get_current_chunk_status())
-
-            gr.Markdown("---")
-            gr.Markdown("### 📁 Upload Document")
-            file_input = gr.File(
-                label="Choose PDF, DOCX, TXT, or Image",
-                file_types=[".pdf", ".docx", ".txt", ".md", ".png", ".jpg", ".jpeg", ".webp"],
-            )
-            process_btn = gr.Button("📥 Process Uploaded File", variant="primary")
-            process_log = gr.Markdown("")
-
-            gr.Markdown("---")
-            clear_btn = gr.Button("🗑️ Clear Processed Documents", variant="secondary")
-
-        # Right chat column
-        with gr.Column(scale=2):
-            chatbot = gr.Chatbot(
-                label="Chat",
-                height=520,
-            )
-            with gr.Row():
-                msg_input = gr.Textbox(
-                    placeholder="Ask a question about your documents...",
-                    show_label=False,
-                    scale=5,
-                )
-                send_btn = gr.Button("Send", variant="primary", scale=1)
-
-    # Event handlers
-    process_btn.click(
-        fn=process_file,
-        inputs=[file_input],
-        outputs=[process_log, chunk_status],
+    st.markdown("---")
+    st.header("📁 Upload Document")
+    uploaded_file = st.file_uploader(
+        "Upload PDF, DOCX, TXT, or Image",
+        type=["pdf", "docx", "txt", "md", "png", "jpg", "jpeg", "webp"],
     )
+    if st.button("📥 Process Uploaded File", use_container_width=True):
+        if uploaded_file:
+            save_path = UPLOADS_DIR / uploaded_file.name
+            save_path.write_bytes(uploaded_file.getbuffer())
+            with st.spinner("Processing file and extracting visual content..."):
+                docs = load_any_document(save_path)
+                chunks = split_documents(docs)
+                add_documents_to_store(chunks, db)
+                st.session_state.all_documents = get_all_stored_documents(db)
 
-    clear_btn.click(
-        fn=clear_documents,
-        inputs=[],
-        outputs=[process_log, chunk_status, chatbot],
-    )
+            img_count = sum(1 for d in docs if d.metadata.get("type") == "image")
+            if img_count > 0:
+                st.success(f"Processed {len(chunks)} chunks (including {img_count} visual diagrams/images)!")
+            else:
+                st.success(f"Processed {len(chunks)} chunks!")
+            st.rerun()
+        else:
+            st.warning("Please choose a file first.")
 
-    send_btn.click(
-        fn=chat_response,
-        inputs=[msg_input, chatbot],
-        outputs=[msg_input, chatbot],
-    )
+    st.markdown("---")
+    if st.button("🗑️ Clear Processed Documents", use_container_width=True):
+        clear_vector_store(db)
+        st.session_state.all_documents = []
+        st.session_state.messages = []
+        st.success("Database cleared!")
+        st.rerun()
 
-    msg_input.submit(
-        fn=chat_response,
-        inputs=[msg_input, chatbot],
-        outputs=[msg_input, chatbot],
-    )
 
-if __name__ == "__main__":
-    demo.launch()
+# --- MAIN SCREEN ---
+st.title("Multimodal RAG Assistant")
+
+if has_docs:
+    sources = list(dict.fromkeys(d.metadata.get("source", "Doc") for d in st.session_state.all_documents))
+    st.caption(f"🟢 **Ready to chat!** {len(st.session_state.all_documents)} chunks processed from: `{'`, `'.join(sources)}`")
+
+# Show chat messages
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+        if "evidence" in msg and msg["evidence"]:
+            with st.expander("🔍 Citations & Evidence"):
+                for i, doc in enumerate(msg["evidence"], 1):
+                    source = doc.metadata.get("source", "Unknown")
+                    page = doc.metadata.get("page", 1)
+                    st.markdown(f"**Evidence #{i} — `{source}` (Page {page})**")
+                    image_path = doc.metadata.get("image_path")
+                    if image_path and Path(image_path).exists():
+                        st.image(str(image_path), caption=f"Extracted image from {source} (Page {page})", use_container_width=True)
+                    st.write(doc.page_content)
+
+
+# --- CHAT INPUT ---
+prompt_text = "Ask a question about your documents..." if has_docs else "Upload a document in the sidebar to begin..."
+user_query = st.chat_input(prompt_text, disabled=not has_docs)
+
+if user_query and has_docs:
+    # 1. Add user message
+    st.session_state.messages.append({"role": "user", "content": user_query})
+
+    # 2. Retrieve & generate answer
+    with st.spinner("Searching documents & generating answer..."):
+        retrieved_docs = hybrid_search(user_query, db, st.session_state.all_documents, k=4)
+        result = generate_grounded_answer(user_query, retrieved_docs)
+        answer = result["answer"]
+
+    # 3. Add assistant message
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": answer,
+        "evidence": retrieved_docs,
+    })
+    st.rerun()
