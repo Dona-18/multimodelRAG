@@ -7,5 +7,6 @@ langchain-text-splitters>=1.1,<2
 pypdf>=6.0,<7
 python-docx>=1.2,<2
 rank-bm25>=0.2,<1
+opencv-python-headless
 unstructured[pdf]>=0.18,<0.19
 pytest>=9,<10
