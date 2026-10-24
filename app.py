@@ -99,47 +99,30 @@ with st.sidebar:
 
 
 # --- MAIN SCREEN ---
-st.title("🧠 Multimodal RAG Assistant")
+st.title("Multimodal RAG Assistant")
 
-if not has_docs:
-    st.info("🔒 **Chat is locked.** Paste text or upload a document to unlock the assistant.")
-
-    pasted_title = st.text_input("Document Title:", value="My_Notes.txt")
-    pasted_text = st.text_area("Paste document text here:", height=180, placeholder="Type or paste notes here...")
-
-    if st.button("🚀 Process Pasted Text & Unlock Chat", type="primary", use_container_width=True):
-        if pasted_text.strip():
-            with st.spinner("Processing notes..."):
-                docs = load_pasted_text(pasted_text, source_name=pasted_title.strip() or "Notes.txt")
-                chunks = split_documents(docs)
-                add_documents_to_store(chunks, db)
-                st.session_state.all_documents = get_all_stored_documents(db)
-            st.success("Processed successfully! Chat is now ready.")
-            st.rerun()
-        else:
-            st.warning("Please paste some text first.")
-else:
+if has_docs:
     sources = list(dict.fromkeys(d.metadata.get("source", "Doc") for d in st.session_state.all_documents))
-    st.success(f"🟢 **Ready to chat!** {len(st.session_state.all_documents)} chunks processed from: `{'`, `'.join(sources)}`")
+    st.caption(f"🟢 **Ready to chat!** {len(st.session_state.all_documents)} chunks processed from: `{'`, `'.join(sources)}`")
 
-    # Show chat messages
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            if "evidence" in msg and msg["evidence"]:
-                with st.expander("🔍 Citations & Evidence"):
-                    for i, doc in enumerate(msg["evidence"], 1):
-                        source = doc.metadata.get("source", "Unknown")
-                        page = doc.metadata.get("page", 1)
-                        st.markdown(f"**Evidence #{i} — `{source}` (Page {page})**")
-                        image_path = doc.metadata.get("image_path")
-                        if image_path and Path(image_path).exists():
-                            st.image(str(image_path), caption=f"Extracted image from {source} (Page {page})", use_container_width=True)
-                        st.write(doc.page_content)
+# Show chat messages
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+        if "evidence" in msg and msg["evidence"]:
+            with st.expander("🔍 Citations & Evidence"):
+                for i, doc in enumerate(msg["evidence"], 1):
+                    source = doc.metadata.get("source", "Unknown")
+                    page = doc.metadata.get("page", 1)
+                    st.markdown(f"**Evidence #{i} — `{source}` (Page {page})**")
+                    image_path = doc.metadata.get("image_path")
+                    if image_path and Path(image_path).exists():
+                        st.image(str(image_path), caption=f"Extracted image from {source} (Page {page})", use_container_width=True)
+                    st.write(doc.page_content)
 
 
 # --- CHAT INPUT ---
-prompt_text = "Ask a question about your documents..." if has_docs else "🔒 Paste a document above to unlock chat..."
+prompt_text = "Ask a question about your documents..." if has_docs else "Upload a document in the sidebar to begin..."
 user_query = st.chat_input(prompt_text, disabled=not has_docs)
 
 if user_query and has_docs:
