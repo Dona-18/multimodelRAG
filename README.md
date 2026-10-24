@@ -121,6 +121,7 @@ local-multimodal-rag-assistant/
 │   └── reembed.py              # Standalone re-embedding utility for batch documents
 ├── evaluation/
 │   ├── benchmark.py            # Automated evaluation suite comparing model profiles
+│   ├── dataset.json            # 15 ground-truth queries (text, multimodal diagrams, refusals)
 │   └── benchmark_report.md     # Latest benchmark metrics and findings
 ├── data/
 │   ├── chroma_db/              # Persistent ChromaDB SQLite vector store
@@ -134,16 +135,28 @@ local-multimodal-rag-assistant/
 
 ## Benchmark Evaluation Results
 
-Evaluated on 5 ground-truth multimodal RAG benchmark queries (`evaluation/benchmark.py`):
+Evaluated on **15 verified ground-truth queries** (6 text reasoning, 5 multimodal diagrams, 4 negative refusal controls) using a **Dual-Judge Consensus framework** (Judge 1: `qwen3:latest`, Judge 2: `gemma4:e2b-mlx`):
 
-| Metric | Qwen3 + Qwen3-Embedding (New) | Gemma 4 + Nomic (Fallback) | Advantage |
+| Evaluation Metric | Qwen3 + Qwen3-Embedding (New) | Gemma 4 + Nomic (Fallback) | Advantage |
 | :--- | :--- | :--- | :--- |
-| **Retrieval Recall@5** | **100.0%** | 100.0% | Both perfect |
-| **Answer Accuracy** | **63.3%** | 56.7% | **+6.6% Qwen3** |
-| **Faithfulness** | **80.0%** | 80.0% | Strict grounding |
-| **Citation Accuracy** | **90.0%** | 90.0% | Exact source/page |
-| **Avg Query Latency** | **17.83s** (with reasoning) | 5.85s | Gemma (no thinking mode) |
-| **Memory Footprint** | **158.1 MB** | 127.3 MB | Lightweight RAM |
+| **LLM Model** | `qwen3:latest` | `gemma4:e2b-mlx` | SOTA Reasoning |
+| **Embedding Model** | `qwen3-embedding:0.6b` (**1024d**) | `nomic-embed-text:latest` (**768d**) | 1024 High-Res Vectors |
+| **True Recall@5** | **93.3%** | 93.3% | Equal retrieval reach |
+| **Precision@5** | **72.0%** | 72.0% | High-density retrieval |
+| **MRR (Mean Reciprocal Rank)** | **0.933** | 0.933 | Top-1 retrieval priority |
+| **Refusal Precision (Safety)** | **100.0%** | 100.0% | Zero hallucination on missing facts |
+| **Citation Precision** | **100.0%** | 100.0% | Exact source and page verification |
+| **Consensus Faithfulness** | **98.7%** (4.93 / 5.0) | 96.0% (4.80 / 5.0) | Grounded claims in context |
+| **Consensus Answer Relevance** | **100.0%** (5.00 / 5.0) | 98.7% (4.93 / 5.0) | Full accuracy vs ground truth |
+| **Inter-Judge Agreement** | **100.0%** | 93.3% | Cross-model validation |
+| **Avg Retrieval Latency** | **309.2 ms** | 83.8 ms | Fast hybrid search |
+| **Avg Generation Latency** | **15.77 s** | 4.91 s | Gemma (no thinking mode) |
+| **Memory Footprint** | **33.1 MB** | 29.3 MB | Ultra-lightweight RAM |
+
+To re-run the benchmark suite:
+```bash
+.venv/bin/python evaluation/benchmark.py
+```
 
 ---
 
