@@ -1,10 +1,10 @@
-"""Streamlit Web Application for Local Multimodal RAG Assistant.
+"""Streamlit Web Application for Local Multimodal RAG & Agentic Assistant.
 
-Simple, beginner-friendly RAG workflow:
+Workflow:
 1. Ingestion: Attach documents directly in the chat UI
 2. Storage: ChromaDB vector store with isolated collections per embedding model
-3. Retrieval: Hybrid search (Vector + BM25 keyword + RRF)
-4. Generation: Grounded answers with Qwen3 / Gemma and visual citations
+3. Retrieval & Tooling: Hybrid search (Vector + BM25 keyword + RRF) bound as agent tools
+4. Generation: Autonomous Agentic ReAct loop (Thought -> Action -> Observation) with visual citations
 """
 import sys
 from pathlib import Path
@@ -32,6 +32,7 @@ from src.vector_store import (
 )
 from src.retrieval import hybrid_search
 from src.generation import generate_grounded_answer
+from src.agent import run_agentic_rag
 
 # Page config
 st.set_page_config(page_title="Multimodal RAG Assistant", layout="centered")
@@ -67,10 +68,17 @@ with st.sidebar:
         st.error("Service: Offline (run `ollama serve`)")
 
     st.markdown("---")
-    st.header("🤖 Model Configuration")
+    st.header("🤖 Mode & Architecture")
+    execution_mode = st.radio(
+        "Workflow Engine",
+        options=["Agentic RAG (ReAct Tool Loop)", "Standard Pipeline RAG"],
+        index=0,
+        help="Agentic RAG uses autonomous Thought -> Action -> Observation tool calling",
+    )
+
     profile_keys = list(MODEL_PROFILES.keys())
     active_profile_key = st.selectbox(
-        "Active Model Profile",
+        "Model Profile",
         options=profile_keys,
         format_func=lambda k: MODEL_PROFILES[k]["name"],
         index=0,
@@ -79,7 +87,7 @@ with st.sidebar:
     active_profile = MODEL_PROFILES[active_profile_key]
 
     with st.expander("System Details", expanded=False):
-        st.caption(f"**Profile:** `{active_profile['name']}`")
+        st.caption(f"**Engine:** `{execution_mode}`")
         st.caption(f"**LLM:** `{active_profile['llm']}`")
         st.caption(f"**Embeddings:** `{active_profile['embedding']}` ({active_profile['embedding_dim']} dims)")
         st.caption(f"**Vision Captioner:** `{active_profile['vision']}`")
@@ -134,8 +142,8 @@ if "messages" not in st.session_state or len(st.session_state.messages) == 0:
             "role": "assistant",
             "content": (
                 f"👋 **Welcome to Multimodal RAG Assistant!**\n\n"
-                f"Active model: **{active_profile['name']}**.\n\n"
-                "Upload a PDF, DOCX, TXT, or image above to ask questions with citations and visual evidence."
+                f"Running in **{execution_mode}** with **{active_profile['name']}**.\n\n"
+                "Upload a document above or ask questions directly below."
             ),
         }
     ]
@@ -220,6 +228,14 @@ st.markdown("---")
 # Render chat messages
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
+        # Show agent tool execution steps if present
+        if "tool_steps" in msg and msg["tool_steps"]:
+            with st.status(f"🤖 Agent executed {len(msg['tool_steps'])} tool actions", state="complete"):
+                for step in msg["tool_steps"]:
+                    st.markdown(f"**Step {step['turn']}:** Invoked tool `{step['tool']}` with `{step['args']}`")
+                    if step.get("output_snippet"):
+                        st.caption(f"Observation: {step['output_snippet']}")
+
         st.markdown(msg["content"])
         if "evidence" in msg and msg["evidence"]:
             with st.expander("🔍 Citations & Evidence"):
@@ -279,30 +295,34 @@ if submission:
 
         with st.chat_message("assistant"):
             current_docs = get_all_stored_documents(db)
-            if not current_docs:
-                no_doc_msg = "⚠️ No documents indexed in the current collection. Please upload a document first."
-                st.markdown(no_doc_msg)
-                st.session_state.messages.append({"role": "assistant", "content": no_doc_msg})
-            else:
-                with st.spinner(f"Searching `{active_profile['name']}` & generating grounded answer..."):
-                    retrieved_docs = hybrid_search(
-                        user_text,
-                        db,
-                        current_docs,
-                        k=top_k,
-                    )
-                    result = generate_grounded_answer(
-                        user_text,
-                        retrieved_docs,
-                        temperature=temperature,
+
+            if "Agentic" in execution_mode:
+                # --- AGENTIC RAG (Autonomous Tool Loop) ---
+                with st.spinner(f"Agent reasoning with `{active_profile['llm']}`..."):
+                    agent_res = run_agentic_rag(
+                        query=user_text,
+                        db=db,
+                        all_documents=current_docs,
                         model=active_profile["llm"],
+                        temperature=temperature,
+                        top_k=top_k,
                     )
-                    answer = result["answer"]
+                    answer = agent_res["answer"]
+                    tool_steps = agent_res.get("tool_steps", [])
+                    evidence = agent_res.get("evidence", [])
+
+                if tool_steps:
+                    with st.status(f"🤖 Agent executed {len(tool_steps)} tool actions", state="complete"):
+                        for step in tool_steps:
+                            st.markdown(f"**Step {step['turn']}:** Invoked tool `{step['tool']}` with `{step['args']}`")
+                            if step.get("output_snippet"):
+                                st.caption(f"Observation: {step['output_snippet']}")
 
                 st.markdown(answer)
-                if retrieved_docs:
+
+                if evidence:
                     with st.expander("🔍 Citations & Evidence"):
-                        for i, doc in enumerate(retrieved_docs, 1):
+                        for i, doc in enumerate(evidence, 1):
                             source = doc.metadata.get("source", "Unknown")
                             page = doc.metadata.get("page", 1)
                             st.markdown(f"**Evidence #{i} — `{source}` (Page {page})**")
@@ -319,7 +339,53 @@ if submission:
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": answer,
-                    "evidence": retrieved_docs,
+                    "tool_steps": tool_steps,
+                    "evidence": evidence,
                 })
+
+            else:
+                # --- STANDARD PIPELINE RAG ---
+                if not current_docs:
+                    no_doc_msg = "⚠️ No documents indexed in the current collection. Please upload a document first."
+                    st.markdown(no_doc_msg)
+                    st.session_state.messages.append({"role": "assistant", "content": no_doc_msg})
+                else:
+                    with st.spinner(f"Searching `{active_profile['name']}` & generating grounded answer..."):
+                        retrieved_docs = hybrid_search(
+                            user_text,
+                            db,
+                            current_docs,
+                            k=top_k,
+                        )
+                        result = generate_grounded_answer(
+                            user_text,
+                            retrieved_docs,
+                            temperature=temperature,
+                            model=active_profile["llm"],
+                        )
+                        answer = result["answer"]
+
+                    st.markdown(answer)
+                    if retrieved_docs:
+                        with st.expander("🔍 Citations & Evidence"):
+                            for i, doc in enumerate(retrieved_docs, 1):
+                                source = doc.metadata.get("source", "Unknown")
+                                page = doc.metadata.get("page", 1)
+                                st.markdown(f"**Evidence #{i} — `{source}` (Page {page})**")
+                                image_path = doc.metadata.get("image_path")
+                                if image_path and Path(image_path).exists():
+                                    st.image(
+                                        str(image_path),
+                                        caption=f"Extracted image from {source} (Page {page})",
+                                        alt=f"Visual evidence from {source} page {page}",
+                                        width="stretch",
+                                    )
+                                st.write(doc.page_content)
+
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": answer,
+                        "evidence": retrieved_docs,
+                    })
 
     st.rerun()
