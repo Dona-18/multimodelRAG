@@ -132,6 +132,9 @@ else:
                         source = doc.metadata.get("source", "Unknown")
                         page = doc.metadata.get("page", 1)
                         st.markdown(f"**Evidence #{i} — `{source}` (Page {page})**")
+                        image_path = doc.metadata.get("image_path")
+                        if image_path and Path(image_path).exists():
+                            st.image(str(image_path), caption=f"Extracted image from {source} (Page {page})", use_container_width=True)
                         st.write(doc.page_content)
 
 

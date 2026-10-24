@@ -10,7 +10,7 @@ from pypdf import PdfReader
 from PIL import Image
 import ollama
 
-from src.config import LLM_MODEL, OLLAMA_URL
+from src.config import IMAGES_DIR, LLM_MODEL, OLLAMA_URL
 
 
 def describe_image(image_bytes: bytes) -> str:
@@ -113,6 +113,7 @@ def load_image_file(file_path: Union[str, Path]) -> List[Document]:
                 "source": path.name,
                 "page": 1,
                 "type": "image",
+                "image_path": str(path.resolve()),
                 "original_content": json.dumps({"visual_description": content}),
             },
         )
@@ -143,22 +144,34 @@ def load_pdf_file(file_path: Union[str, Path], include_vision: bool = True) -> L
 
         # 2. Extract and describe diagrams / images on this page
         if include_vision and hasattr(page, "images"):
-            for img in page.images:
+            for img_idx, img in enumerate(page.images, start=1):
                 if len(img.data) < 1024:  # skip tiny decorative icons
                     continue
+
+                # Save extracted image for visual evidence in chat UI
+                img_save_name = f"{path.stem}_p{page_idx}_img{img_idx}.jpg"
+                img_save_path = IMAGES_DIR / img_save_name
+                try:
+                    pil_img = Image.open(io.BytesIO(img.data)).convert("RGB")
+                    pil_img.save(img_save_path, format="JPEG")
+                    image_path_str = str(img_save_path.resolve())
+                except Exception:
+                    image_path_str = ""
+
                 desc = describe_image(img.data)
-                if desc:
-                    docs.append(
-                        Document(
-                            page_content=f"[Visual / Diagram on Page {page_idx}]: {desc}",
-                            metadata={
-                                "source": path.name,
-                                "page": page_idx,
-                                "type": "image",
-                                "original_content": json.dumps({"visual_description": desc}),
-                            },
-                        )
+                content = desc if desc else f"Extracted diagram/image on Page {page_idx}"
+                docs.append(
+                    Document(
+                        page_content=f"[Visual / Diagram on Page {page_idx}]: {content}",
+                        metadata={
+                            "source": path.name,
+                            "page": page_idx,
+                            "type": "image",
+                            "image_path": image_path_str,
+                            "original_content": json.dumps({"visual_description": content}),
+                        },
                     )
+                )
     return docs
 
 

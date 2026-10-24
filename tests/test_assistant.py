@@ -84,6 +84,7 @@ def test_multimodal_image_loading(tmp_path: Path):
         docs = load_any_document(img_path)
         assert len(docs) == 1
         assert docs[0].metadata["type"] == "image"
+        assert docs[0].metadata["image_path"] == str(img_path.resolve())
         assert "blue chart" in docs[0].page_content
 
 
