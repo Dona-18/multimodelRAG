@@ -112,15 +112,11 @@ def render_upload_control(
 store, ollama = get_services()
 ADVANCED_DEFAULTS = {
     "advanced_temperature": DEFAULT_TEMPERATURE,
-    "advanced_top_p": DEFAULT_TOP_P,
     "advanced_max_output": DEFAULT_MAX_OUTPUT_TOKENS,
     "advanced_context_length": DEFAULT_CONTEXT_LENGTH,
     "advanced_streaming": False,
     "advanced_chunk_size": DEFAULT_CHUNK_SIZE,
     "advanced_chunk_overlap": DEFAULT_CHUNK_OVERLAP,
-    "advanced_use_ocr": DEFAULT_OCR_ENABLED,
-    "advanced_ocr_languages": list(DEFAULT_OCR_LANGUAGES),
-    "advanced_ocr_page_limit": DEFAULT_OCR_PAGE_LIMIT,
     "advanced_visual_summaries": DEFAULT_VISUAL_SUMMARIES,
     "advanced_visual_page_limit": DEFAULT_VISUAL_PAGE_LIMIT,
     "advanced_top_k": DEFAULT_TOP_K,
@@ -159,10 +155,6 @@ with st.sidebar:
             "Temperature", 0.0, 2.0, step=0.05, key="advanced_temperature",
             help="Lower values make answers more consistent. 0.2 is a grounded-answer starting point.",
         )
-        top_p = st.slider(
-            "Top-p", 0.05, 1.0, step=0.05, key="advanced_top_p",
-            help="Limits token choices by cumulative probability. Lower values are more focused.",
-        )
         max_output_tokens = st.number_input(
             "Max output tokens", min_value=64, max_value=8_192, step=64, key="advanced_max_output",
             help="Maximum length of Gemma's answer. A smaller limit is faster and more concise.",
@@ -177,28 +169,16 @@ with st.sidebar:
             help="Show Gemma's answer as it is generated instead of waiting for the full response.",
         )
 
-        st.caption("Indexing and retrieval")
+        st.caption("Processing and retrieval")
         chunk_size = st.slider(
             "Chunk size", 300, 2_000, step=50, key="advanced_chunk_size",
-            help="Characters per indexed chunk. Changing this requires re-indexing the current document.",
+            help="Characters per processed chunk. Changing this requires re-processing the current document.",
         )
         chunk_overlap = st.slider(
             "Chunk overlap", 0, min(500, chunk_size - 1), step=25, key="advanced_chunk_overlap",
-            help="Characters shared by neighboring chunks. Changing this requires re-indexing the current document.",
+            help="Characters shared by neighboring chunks. Changing this requires re-processing the current document.",
         )
-        st.caption("PDF OCR and visual retrieval")
-        use_ocr = st.checkbox(
-            "OCR scanned PDF pages", key="advanced_use_ocr",
-            help="Use Unstructured and the local Tesseract engine only for PDF pages with little or no selectable text.",
-        )
-        ocr_languages = st.multiselect(
-            "OCR languages", options=["eng", "khm"], key="advanced_ocr_languages",
-            help="Languages available in the locally installed Tesseract engine. OCR settings require re-indexing.",
-        )
-        ocr_page_limit = st.number_input(
-            "Maximum scanned pages to OCR", min_value=1, max_value=20, step=1, key="advanced_ocr_page_limit",
-            help="Bounds local OCR time. Raise this only when the document has more scanned pages to index.",
-        )
+        st.caption("Visual retrieval")
         use_visual_summaries = st.checkbox(
             "Add visual page descriptions", key="advanced_visual_summaries",
             help="Render the first PDF pages locally and ask installed Gemma vision for searchable descriptions of diagrams, tables, and charts.",
@@ -206,7 +186,7 @@ with st.sidebar:
         visual_page_limit = st.number_input(
             "Maximum pages for visual descriptions", min_value=1, max_value=10, step=1,
             key="advanced_visual_page_limit",
-            help="Bounds local image rendering and Gemma vision time. Visual settings require re-indexing.",
+            help="Bounds local image rendering and Gemma vision time. Visual settings require re-processing.",
         )
         top_k = st.slider(
             "Retrieval top-k", 1, 20, key="advanced_top_k",
@@ -223,7 +203,7 @@ with st.sidebar:
 
     try:
         generation_settings = GenerationSettings(
-            temperature=float(temperature), top_p=float(top_p), max_output_tokens=int(max_output_tokens),
+            temperature=float(temperature), top_p=float(DEFAULT_TOP_P), max_output_tokens=int(max_output_tokens),
             context_length=int(context_length), streaming=streaming,
         )
         retrieval_settings = RetrievalSettings(
@@ -232,9 +212,9 @@ with st.sidebar:
         index_settings = IndexSettings(
             chunk_size=int(chunk_size),
             chunk_overlap=int(chunk_overlap),
-            use_ocr=use_ocr,
-            ocr_languages=tuple(ocr_languages),
-            ocr_page_limit=int(ocr_page_limit),
+            use_ocr=DEFAULT_OCR_ENABLED,
+            ocr_languages=DEFAULT_OCR_LANGUAGES,
+            ocr_page_limit=DEFAULT_OCR_PAGE_LIMIT,
             use_visual_summaries=use_visual_summaries,
             visual_page_limit=int(visual_page_limit),
         )
