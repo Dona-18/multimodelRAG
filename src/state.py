@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from src.config import ACTIVE_SOURCE_PATH, INDEX_SETTINGS_PATH, UPLOADS_DIR
-from src.settings import IndexSettings
+from src.types import IndexSettings
 
 
 def chat_is_unlocked(indexed_chunks: int) -> bool:
@@ -59,11 +59,8 @@ def load_index_settings() -> IndexSettings | None:
         settings = IndexSettings(
             chunk_size=int(data["chunk_size"]),
             chunk_overlap=int(data["chunk_overlap"]),
-            use_ocr=bool(data["use_ocr"]),
-            ocr_languages=tuple(str(language) for language in data["ocr_languages"]),
-            ocr_page_limit=int(data["ocr_page_limit"]),
-            use_visual_summaries=bool(data["use_visual_summaries"]),
-            visual_page_limit=int(data["visual_page_limit"]),
+            use_visual_summaries=bool(data.get("use_visual_summaries", False)),
+            visual_page_limit=int(data.get("visual_page_limit", 3)),
         )
         settings.validate()
         return settings
@@ -79,9 +76,6 @@ def save_index_settings(settings: IndexSettings) -> None:
             {
                 "chunk_size": settings.chunk_size,
                 "chunk_overlap": settings.chunk_overlap,
-                "use_ocr": settings.use_ocr,
-                "ocr_languages": list(settings.ocr_languages),
-                "ocr_page_limit": settings.ocr_page_limit,
                 "use_visual_summaries": settings.use_visual_summaries,
                 "visual_page_limit": settings.visual_page_limit,
             },

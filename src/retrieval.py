@@ -12,7 +12,6 @@ from rank_bm25 import BM25Plus
 
 from src.config import DEFAULT_MIN_SIMILARITY, RRF_K
 from src.ollama_client import get_chat_model
-from src.settings import GenerationSettings
 from src.types import Chunk, RetrievalResult, SearchHit
 from src.vector_store import VectorStore
 
@@ -34,16 +33,10 @@ def keyword_search(query: str, chunks: list[Chunk], k: int) -> list[tuple[Chunk,
 
 class QueryVariations(BaseModel):
     """The Pydantic + JsonOutputParser shape used in lesson 10."""
-
     queries: list[str] = Field(description="Alternative retrieval queries")
 
 
-def generate_query_variations(
-    query: str,
-    llm: ChatOllama | None = None,
-    count: int = 3,
-    generation_settings: GenerationSettings | None = None,
-) -> list[str]:
+def generate_query_variations(query: str, llm: ChatOllama | None = None, count: int = 3) -> list[str]:
     """Generate lesson-style query variations, with safe fallback to the original."""
     parser = JsonOutputParser(pydantic_object=QueryVariations)
     prompt = PromptTemplate(
@@ -56,7 +49,7 @@ def generate_query_variations(
         partial_variables={"format_instructions": parser.get_format_instructions()},
     )
     try:
-        response = (prompt | (llm or get_chat_model(generation_settings)) | parser).invoke(
+        response = (prompt | (llm or get_chat_model()) | parser).invoke(
             {"original_query": query, "count": count}
         )
         candidates = response["queries"] if isinstance(response, dict) else response.queries
@@ -94,11 +87,9 @@ def hybrid_search(
     top_k: int,
     min_similarity: float = DEFAULT_MIN_SIMILARITY,
     use_multi_query: bool = False,
-    use_hybrid_search: bool = True,
-    generation_settings: GenerationSettings | None = None,
     llm: ChatOllama | None = None,
 ) -> RetrievalResult:
-    """Use vector search alone or lesson 12 hybrid lists, with optional multi-query."""
+    """Fuse lesson 12 hybrid lists and optional lesson 10 multi-query lists."""
     clean_query = query.strip()
     if not clean_query:
         return RetrievalResult(reason="Please enter a question.")
@@ -107,19 +98,13 @@ def hybrid_search(
         return RetrievalResult(reason="No documents are indexed yet.")
 
     candidate_k = max(top_k * 2, 8)
-    queries = (
-        generate_query_variations(clean_query, llm=llm, generation_settings=generation_settings)
-        if use_multi_query
-        else [clean_query]
-    )
+    queries = generate_query_variations(clean_query, llm=llm) if use_multi_query else [clean_query]
     ranked_lists: list[list[tuple[Chunk, float]]] = []
     bm25_scores: dict[str, float] = {}
     for search_query in queries:
         vector_results = [(chunk, 1.0) for chunk in store.vector_search(search_query, candidate_k)]
-        ranked_lists.append(vector_results)
-        bm25_results = keyword_search(search_query, all_chunks, candidate_k) if use_hybrid_search else []
-        if use_hybrid_search:
-            ranked_lists.append(bm25_results)
+        bm25_results = keyword_search(search_query, all_chunks, candidate_k)
+        ranked_lists.extend([vector_results, bm25_results])
         for chunk, score in bm25_results:
             bm25_scores[chunk.id] = max(score, bm25_scores.get(chunk.id, 0.0))
     fused = reciprocal_rank_fusion(ranked_lists)
@@ -146,12 +131,5 @@ def hybrid_search(
                 f"evidence threshold of {min_similarity:.2f}."
             ),
         )
-    if use_multi_query and use_hybrid_search:
-        method = "multi-query hybrid RRF"
-    elif use_multi_query:
-        method = "multi-query vector RRF"
-    elif use_hybrid_search:
-        method = "hybrid RRF"
-    else:
-        method = "vector retrieval"
+    method = "multi-query hybrid RRF" if use_multi_query else "hybrid RRF"
     return RetrievalResult(hits=hits, sufficient=True, reason=f"Retrieved evidence passed the similarity threshold using {method}.")

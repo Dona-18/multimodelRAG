@@ -44,10 +44,6 @@ DEFAULT_TOP_P = 0.95
 DEFAULT_MAX_OUTPUT_TOKENS = 512
 DEFAULT_CONTEXT_LENGTH = 8_192
 
-# Lesson 8 adaptations. OCR uses the locally installed Tesseract engine via
-# Unstructured. Visual summaries use the already-installed Gemma vision model.
-DEFAULT_OCR_ENABLED = True
-DEFAULT_OCR_LANGUAGES = ("eng",)
-DEFAULT_OCR_PAGE_LIMIT = 5
+# Visual summaries use the local Gemma vision model with Poppler.
 DEFAULT_VISUAL_SUMMARIES = False
 DEFAULT_VISUAL_PAGE_LIMIT = 3

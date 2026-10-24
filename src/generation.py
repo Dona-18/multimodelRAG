@@ -1,4 +1,3 @@
-"""Grounded answer generation and source citation formatting."""
 from __future__ import annotations
 
 import base64
@@ -9,8 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 
 from src.ollama_client import get_chat_model
-from src.settings import GenerationSettings
-from src.types import RetrievalResult, SearchHit
+from src.types import GenerationSettings, RetrievalResult, SearchHit
 
 INSUFFICIENT_EVIDENCE_MESSAGE = (
     "I don't have enough information to answer that question based on the provided documents."

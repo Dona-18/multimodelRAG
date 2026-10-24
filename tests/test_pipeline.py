@@ -11,7 +11,6 @@ from pypdf import PdfWriter
 from src.generation import INSUFFICIENT_EVIDENCE_MESSAGE, answer_question, stream_answer
 from src.ingestion import load_document, make_chunks, recursive_character_chunks
 from src.retrieval import generate_query_variations, hybrid_search, reciprocal_rank_fusion
-from src.settings import GenerationSettings, IndexSettings, RetrievalSettings
 from src.state import (
     chat_is_unlocked,
     clear_active_source,
@@ -21,7 +20,14 @@ from src.state import (
     save_active_source,
     save_index_settings,
 )
-from src.types import Chunk, RetrievalResult, SearchHit
+from src.types import (
+    Chunk,
+    GenerationSettings,
+    IndexSettings,
+    RetrievalResult,
+    RetrievalSettings,
+    SearchHit,
+)
 from src.vector_store import VectorStore
 
 

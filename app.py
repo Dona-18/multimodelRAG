@@ -11,9 +11,6 @@ from src.config import (
     DEFAULT_CONTEXT_LENGTH,
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_MIN_SIMILARITY,
-    DEFAULT_OCR_ENABLED,
-    DEFAULT_OCR_LANGUAGES,
-    DEFAULT_OCR_PAGE_LIMIT,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_K,
     DEFAULT_TOP_P,
@@ -28,7 +25,7 @@ from src.ingestion import DocumentLoadError, load_document, make_chunks, save_up
 from src.multimodal import build_pdf_chunks
 from src.ollama_client import LocalOllama, OllamaUnavailableError
 from src.retrieval import hybrid_search
-from src.settings import GenerationSettings, IndexSettings, RetrievalSettings
+from src.types import GenerationSettings, IndexSettings, RetrievalSettings
 from src.state import (
     chat_is_unlocked,
     clear_active_source,
@@ -218,9 +215,6 @@ with st.sidebar:
         index_settings = IndexSettings(
             chunk_size=int(chunk_size),
             chunk_overlap=int(chunk_overlap),
-            use_ocr=DEFAULT_OCR_ENABLED,
-            ocr_languages=DEFAULT_OCR_LANGUAGES,
-            ocr_page_limit=DEFAULT_OCR_PAGE_LIMIT,
             use_visual_summaries=use_visual_summaries,
             visual_page_limit=int(visual_page_limit),
         )
