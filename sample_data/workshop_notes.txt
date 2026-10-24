@@ -1,0 +1,6 @@
+Local RAG Workshop
+
+The local RAG workshop is scheduled for 14 November 2026 at 10:00 AM in Room Orchid.
+The workshop has a maximum of 24 attendees. Bring a Mac with Ollama installed.
+
+The hands-on session indexes private notes locally and never sends document content to a cloud API.
