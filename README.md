@@ -8,7 +8,7 @@ app_file: app.py
 pinned: false
 ---
 
-# Local RAG Assistant
+# Multimodal RAG Assistant
 
 A beginner-friendly, local-first document Q&A app for macOS Apple Silicon.
 It keeps one current document, its Nomic embeddings, ChromaDB, and all Ollama

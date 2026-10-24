@@ -34,7 +34,7 @@ from src.settings import GenerationSettings, IndexSettings, RetrievalSettings
 from src.ui_state import chat_is_unlocked
 from src.vector_store import VectorStore
 
-st.set_page_config(page_title="Local RAG Assistant", page_icon="📚", layout="centered")
+st.set_page_config(page_title="Multimodal RAG Assistant", page_icon="📚", layout="centered")
 
 
 @st.cache_resource
@@ -141,7 +141,7 @@ except OllamaUnavailableError as exc:
     model_error = str(exc)
 
 with st.sidebar:
-    st.header("Local RAG")
+    st.header("Multimodal RAG")
     st.caption("Your document, embeddings, database, and answers stay on this Mac.")
     st.metric("Processed chunks", store.count)
 
@@ -259,7 +259,7 @@ with st.sidebar:
         st.session_state.notice = "Cleared the current document. Your uploaded file remains stored locally."
         st.rerun()
 
-st.title("📚 Local RAG Assistant")
+st.title("📚 Multimodal RAG Assistant")
 st.caption("Upload one document, then ask grounded questions with local citations.")
 
 if st.session_state.notice:
