@@ -48,7 +48,11 @@ if "messages" not in st.session_state:
 if "all_documents" not in st.session_state:
     st.session_state.all_documents = []
 
-db = get_vector_store(CHROMA_DIR)
+@st.cache_resource
+def load_vector_store():
+    return get_vector_store(CHROMA_DIR)
+
+db = load_vector_store()
 
 # Load existing documents if not already loaded
 if not st.session_state.all_documents:

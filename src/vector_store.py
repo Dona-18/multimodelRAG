@@ -1,6 +1,8 @@
 """ChromaDB vector store operations."""
 from pathlib import Path
 from typing import List, Union
+import chromadb
+from chromadb.config import Settings
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
@@ -12,8 +14,12 @@ def get_vector_store(
     collection_name: str = "multimodal_documents",
 ) -> Chroma:
     """Connect to or create a ChromaDB vector store."""
+    client = chromadb.PersistentClient(
+        path=str(persist_directory),
+        settings=Settings(anonymized_telemetry=False, is_persistent=True),
+    )
     return Chroma(
-        persist_directory=str(persist_directory),
+        client=client,
         embedding_function=OllamaEmbeddings(
             model=EMBEDDING_MODEL,
             base_url=OLLAMA_URL,
